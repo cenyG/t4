@@ -1,0 +1,23 @@
+syntax = "proto3";
+
+package chunkstorage;
+
+option go_package = "pb/chunkstorage";
+
+service ChunkStorage {
+  // Method to send file part to store server
+  rpc UploadChunk (stream UploadChunkRequest) returns (UploadChunkResponse);
+}
+
+// Сообщение для отправки части файла
+message UploadChunkRequest {
+  // File name
+  string file_name = 1;
+  // Chunk index
+  int32 chunk_index = 2;
+  // Chunk bytes
+  bytes chunk_data = 3;
+}
+
+// Ответ от сервера хранения
+message UploadChunkResponse {}
