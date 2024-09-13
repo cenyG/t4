@@ -1,17 +1,21 @@
 package main
 
 import (
-	"T4_test_case/config"
-	"T4_test_case/internal/restserver/http"
-	"T4_test_case/internal/restserver/services"
-	"T4_test_case/internal/restserver/usecase"
-	"T4_test_case/pkg/httpserver"
 	"context"
-	"github.com/gin-gonic/gin"
+	"log"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"T4_test_case/config"
+	"T4_test_case/internal/restserver/http"
+	"T4_test_case/internal/restserver/repo"
+	"T4_test_case/internal/restserver/services"
+	"T4_test_case/internal/restserver/usecase"
+	"T4_test_case/pkg/db"
+	"T4_test_case/pkg/httpserver"
+	"github.com/gin-gonic/gin"
 )
 
 func main() {
@@ -20,15 +24,22 @@ func main() {
 	// Services
 	storageServersProvider, err := services.NewStorageServersProvider(ctx)
 	if err != nil {
-		slog.Error("[main] services.NewStorageServersProvider() error: %v", err)
+		log.Fatalf("[main] services.NewStorageServersProvider() error: %v", err)
 	}
 
+	// Store
+	store, err := db.NewStore()
+	if err != nil {
+		log.Fatalf("[main] db.NewStore() error: %v", err)
+	}
+	fileRepo := repo.NewFileRepository(store)
+
 	// UseCase
-	useCaseProvider := usecase.NewUseCaseProvider(storageServersProvider)
+	useCaseProvider := usecase.NewUseCaseProvider(storageServersProvider, fileRepo)
 
 	// HTTP Server
 	handler := gin.New()
-	http.NewRouter(handler, useCaseProvider)
+	http.NewRouter(handler, useCaseProvider, fileRepo)
 	httpServer := httpserver.New(handler, httpserver.Port(config.Cfg.Rest.Port))
 
 	// Waiting signal

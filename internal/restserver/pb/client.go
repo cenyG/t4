@@ -1,34 +1,44 @@
 package pb
 
 import (
-	"T4_test_case/internal/restserver/pb/chunkstorage"
 	"context"
+	"io"
+	"strconv"
+
+	desc "T4_test_case/internal/restserver/pb/chunkstorage"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"io"
-	"strconv"
 )
 
 type ChunkStorageClient interface {
 	UploadChunkStream(ctx context.Context, fileName string, chunkIndex int32, chunkData io.Reader, chunkSize int64) error
+	DownloadChunkStream(ctx context.Context, fileName string, chunkIndex int32, writer io.Writer) error
+	GetServiceID() string
 }
 
 // ChunkStorageClient .
 type chunkStorageClient struct {
-	client chunkstorage.ChunkStorageClient
+	client    desc.ChunkStorageClient
+	serviceId string
+}
+
+func (s *chunkStorageClient) GetServiceID() string {
+	return s.serviceId
 }
 
 // NewChunkStorageClient .
-func NewChunkStorageClient(host string, port int) (ChunkStorageClient, error) {
+func NewChunkStorageClient(host string, port int, serviceId string) (ChunkStorageClient, error) {
 	addr := host + ":" + strconv.Itoa(port)
+
 	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, errors.Wrapf(err, "could not connect to storage server: %s", addr)
 	}
 
 	return &chunkStorageClient{
-		client: chunkstorage.NewChunkStorageClient(conn),
+		client:    desc.NewChunkStorageClient(conn),
+		serviceId: serviceId,
 	}, nil
 }
 
@@ -51,7 +61,7 @@ func (s *chunkStorageClient) UploadChunkStream(ctx context.Context, fileName str
 			return errors.Wrap(readErr, "failed to read chunk")
 		}
 
-		sendErr := stream.Send(&chunkstorage.UploadChunkRequest{
+		sendErr := stream.Send(&desc.UploadChunkRequest{
 			FileName:   fileName,
 			ChunkIndex: chunkIndex,
 			ChunkData:  buffer[:n],
@@ -65,6 +75,36 @@ func (s *chunkStorageClient) UploadChunkStream(ctx context.Context, fileName str
 	_, err = stream.CloseAndRecv()
 	if err != nil {
 		return errors.Wrap(err, "stream.CloseAndRecv()")
+	}
+
+	return nil
+}
+
+// DownloadChunkStream - load chunk from storage server
+func (s *chunkStorageClient) DownloadChunkStream(ctx context.Context, fileName string, chunkIndex int32, writer io.Writer) error {
+	req := &desc.DownloadChunkRequest{
+		FileName:   fileName,
+		ChunkIndex: chunkIndex,
+	}
+
+	stream, err := s.client.DownloadChunk(ctx, req)
+	if err != nil {
+		return errors.Wrap(err, "failed to download file part")
+	}
+
+	for {
+		resp, streamErr := stream.Recv()
+		if streamErr == io.EOF {
+			break
+		}
+		if streamErr != nil {
+			return errors.Wrap(streamErr, "error receiving file part")
+		}
+
+		_, err = writer.Write(resp.Data)
+		if err != nil {
+			return errors.Wrap(err, "failed to write chunk")
+		}
 	}
 
 	return nil

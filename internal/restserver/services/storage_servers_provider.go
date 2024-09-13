@@ -1,35 +1,39 @@
 package services
 
 import (
-	"T4_test_case/config"
-	"T4_test_case/internal/restserver/model"
-	"T4_test_case/internal/restserver/pb"
 	"context"
-	consulapi "github.com/hashicorp/consul/api"
-	"github.com/samber/lo"
+	"fmt"
 	"log/slog"
+	"sync"
 	"time"
+
+	"T4_test_case/config"
+	"T4_test_case/internal/restserver/pb"
+	"T4_test_case/pkg/consul"
+	"github.com/samber/lo"
 )
 
 type StorageServersProvider interface {
 	GetStorageServersGrpcClients() []pb.ChunkStorageClient
+	GetStorageServersGrpcClientsMap() map[string]pb.ChunkStorageClient
 }
 
 type storageServersProvider struct {
-	consulClient *consulapi.Client
-	servers      map[model.StorageServerAddress]pb.ChunkStorageClient
+	consulWrapper consul.ConsulWrapper
+	servers       concurrentMap
 }
 
 func NewStorageServersProvider(ctx context.Context) (StorageServersProvider, error) {
-	consulCfg := consulapi.DefaultConfig()
-	client, err := consulapi.NewClient(consulCfg)
+	consulWrapper, err := consul.NewConsulWrapper()
 	if err != nil {
 		return nil, err
 	}
 
 	ssr := storageServersProvider{
-		consulClient: client,
-		servers:      make(map[model.StorageServerAddress]pb.ChunkStorageClient, 6),
+		consulWrapper: consulWrapper,
+		servers: concurrentMap{
+			m: make(map[string]pb.ChunkStorageClient, 6),
+		},
 	}
 	ssr.updateServersWorker(ctx)
 
@@ -37,7 +41,11 @@ func NewStorageServersProvider(ctx context.Context) (StorageServersProvider, err
 }
 
 func (sr *storageServersProvider) GetStorageServersGrpcClients() []pb.ChunkStorageClient {
-	return lo.Values(sr.servers)
+	return sr.servers.Values()
+}
+
+func (sr *storageServersProvider) GetStorageServersGrpcClientsMap() map[string]pb.ChunkStorageClient {
+	return sr.servers.Clone()
 }
 
 func (sr *storageServersProvider) updateServersWorker(ctx context.Context) {
@@ -56,28 +64,62 @@ func (sr *storageServersProvider) updateServersWorker(ctx context.Context) {
 }
 
 func (sr *storageServersProvider) updateServer() {
-	services, _, err := sr.consulClient.Health().Service("storage", "", true, nil)
+	services, err := sr.consulWrapper.GetServices("storage")
 	if err != nil {
-		slog.Error("sr.consulClient.Health().Service() error: %v", err)
+		slog.Error(fmt.Sprintf("[StorageServersProvider] sr.consulWrapper.Health().Service() error: %v", err))
 		return
+	}
+	if len(services) == 0 {
+		slog.Error("[StorageServersProvider] don't found storage servers")
 	}
 
 	for _, service := range services {
-		address := model.StorageServerAddress{
-			Port: service.Service.Port,
-			Host: service.Service.Address,
-		}
+		id, host, port := service.Service.ID, service.Service.Address, service.Service.Port
 
-		if _, ok := sr.servers[address]; !ok {
-			slog.Info("fetch new storage server: %s", address)
+		if _, ok := sr.servers.Get(id); !ok {
+			slog.Info(fmt.Sprintf("[StorageServersProvider] fetch new storage server: %s - %s:%d", id, host, port))
 
-			client, cErr := pb.NewChunkStorageClient(address.Host, address.Port)
+			client, cErr := pb.NewChunkStorageClient(host, port, id)
 			if cErr != nil {
-				slog.Error("pb.NewChunkStorageClient(%s, %d) error: %v", address.Host, address.Port, cErr)
+				slog.Error(fmt.Sprintf("[StorageServersProvider] pb.NewChunkStorageClient(%s, %d, %s) error: %v", host, port, id, cErr))
 				return
 			}
-			sr.servers[address] = client
+			sr.servers.Set(id, client)
 		}
 	}
 
+}
+
+type concurrentMap struct {
+	mu sync.RWMutex
+	m  map[string]pb.ChunkStorageClient
+}
+
+func (c *concurrentMap) Get(key string) (pb.ChunkStorageClient, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	v, ok := c.m[key]
+	return v, ok
+}
+
+func (c *concurrentMap) Values() []pb.ChunkStorageClient {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return lo.Values(c.m)
+}
+
+func (c *concurrentMap) Clone() map[string]pb.ChunkStorageClient {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	// create new map with same values
+	return lo.PickBy(c.m, func(key string, value pb.ChunkStorageClient) bool {
+		return true
+	})
+}
+
+func (c *concurrentMap) Set(key string, val pb.ChunkStorageClient) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.m[key] = val
 }

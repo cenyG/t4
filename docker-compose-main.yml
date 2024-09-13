@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  # Consul for discovery
+  consul:
+    image: consul:1.15.4
+    ports:
+      - "8500:8500"
+    command: "agent -dev -client=0.0.0.0 -log-level=error"
+
+  # Static site to test service
+  static_site:
+    build:
+      context: ./static-site
+    ports:
+      - "8081:80"
+
+  # Postgres DB
+  pg:
+    image: postgres:16.4-alpine3.20
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=t4
+    ports:
+      - "5432:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+  # REST server
+  rest:
+    build:
+      context: .
+      target: rest
+    ports:
+      - "8080:8080"
+    depends_on:
+      - consul
+      - pg
+    environment:
+      - CONSUL_HTTP_ADDR=http://consul:8500
+      - POSTGRES_HOST=pg
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=t4
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+
+volumes:
+  pg_data:

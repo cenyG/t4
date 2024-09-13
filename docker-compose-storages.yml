@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  # First storage instance
+  storage1:
+    build:
+      context: .
+      target: storage
+    ports:
+      - "50051:50051"
+    environment:
+      - STORAGE_NAME=storage.1
+      - STORAGE_PORT=50051
+      - CONSUL_HTTP_ADDR=http://consul:8500
+    # Just for testing
+    volumes:
+      - ./data/s1:/app/files
+
+  # Second storage instance
+  storage2:
+    build:
+      context: .
+      target: storage
+    ports:
+      - "50052:50052"
+    environment:
+      - STORAGE_NAME=storage.2
+      - STORAGE_PORT=50052
+      - CONSUL_HTTP_ADDR=http://consul:8500
+    # Just for testing
+    volumes:
+      - ./data/s2:/app/files
+
+  # Third storage instance
+  storage3:
+    build:
+      context: .
+      target: storage
+    ports:
+      - "50053:50053"
+    environment:
+      - STORAGE_NAME=storage.3
+      - STORAGE_PORT=50053
+      - CONSUL_HTTP_ADDR=http://consul:8500
+    # Just for testing
+    volumes:
+      - ./data/s3:/app/files

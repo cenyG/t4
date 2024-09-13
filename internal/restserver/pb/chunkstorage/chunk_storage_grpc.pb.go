@@ -19,15 +19,18 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	ChunkStorage_UploadChunk_FullMethodName = "/chunkstorage.ChunkStorage/UploadChunk"
+	ChunkStorage_UploadChunk_FullMethodName   = "/chunkstorage.ChunkStorage/UploadChunk"
+	ChunkStorage_DownloadChunk_FullMethodName = "/chunkstorage.ChunkStorage/DownloadChunk"
 )
 
 // ChunkStorageClient is the client API for ChunkStorage service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ChunkStorageClient interface {
-	// Method to send file part to store server
+	// Send file part to store server
 	UploadChunk(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[UploadChunkRequest, UploadChunkResponse], error)
+	// Load file part from store server
+	DownloadChunk(ctx context.Context, in *DownloadChunkRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DownloadChunkResponse], error)
 }
 
 type chunkStorageClient struct {
@@ -51,12 +54,33 @@ func (c *chunkStorageClient) UploadChunk(ctx context.Context, opts ...grpc.CallO
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type ChunkStorage_UploadChunkClient = grpc.ClientStreamingClient[UploadChunkRequest, UploadChunkResponse]
 
+func (c *chunkStorageClient) DownloadChunk(ctx context.Context, in *DownloadChunkRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[DownloadChunkResponse], error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	stream, err := c.cc.NewStream(ctx, &ChunkStorage_ServiceDesc.Streams[1], ChunkStorage_DownloadChunk_FullMethodName, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &grpc.GenericClientStream[DownloadChunkRequest, DownloadChunkResponse]{ClientStream: stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type ChunkStorage_DownloadChunkClient = grpc.ServerStreamingClient[DownloadChunkResponse]
+
 // ChunkStorageServer is the server API for ChunkStorage service.
 // All implementations must embed UnimplementedChunkStorageServer
 // for forward compatibility.
 type ChunkStorageServer interface {
-	// Method to send file part to store server
+	// Send file part to store server
 	UploadChunk(grpc.ClientStreamingServer[UploadChunkRequest, UploadChunkResponse]) error
+	// Load file part from store server
+	DownloadChunk(*DownloadChunkRequest, grpc.ServerStreamingServer[DownloadChunkResponse]) error
 	mustEmbedUnimplementedChunkStorageServer()
 }
 
@@ -69,6 +93,9 @@ type UnimplementedChunkStorageServer struct{}
 
 func (UnimplementedChunkStorageServer) UploadChunk(grpc.ClientStreamingServer[UploadChunkRequest, UploadChunkResponse]) error {
 	return status.Errorf(codes.Unimplemented, "method UploadChunk not implemented")
+}
+func (UnimplementedChunkStorageServer) DownloadChunk(*DownloadChunkRequest, grpc.ServerStreamingServer[DownloadChunkResponse]) error {
+	return status.Errorf(codes.Unimplemented, "method DownloadChunk not implemented")
 }
 func (UnimplementedChunkStorageServer) mustEmbedUnimplementedChunkStorageServer() {}
 func (UnimplementedChunkStorageServer) testEmbeddedByValue()                      {}
@@ -98,6 +125,17 @@ func _ChunkStorage_UploadChunk_Handler(srv interface{}, stream grpc.ServerStream
 // This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
 type ChunkStorage_UploadChunkServer = grpc.ClientStreamingServer[UploadChunkRequest, UploadChunkResponse]
 
+func _ChunkStorage_DownloadChunk_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(DownloadChunkRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ChunkStorageServer).DownloadChunk(m, &grpc.GenericServerStream[DownloadChunkRequest, DownloadChunkResponse]{ServerStream: stream})
+}
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type ChunkStorage_DownloadChunkServer = grpc.ServerStreamingServer[DownloadChunkResponse]
+
 // ChunkStorage_ServiceDesc is the grpc.ServiceDesc for ChunkStorage service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -110,6 +148,11 @@ var ChunkStorage_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "UploadChunk",
 			Handler:       _ChunkStorage_UploadChunk_Handler,
 			ClientStreams: true,
+		},
+		{
+			StreamName:    "DownloadChunk",
+			Handler:       _ChunkStorage_DownloadChunk_Handler,
+			ServerStreams: true,
 		},
 	},
 	Metadata: "protos/chunk_storage.proto",

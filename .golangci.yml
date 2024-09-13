@@ -1,0 +1,31 @@
+# Configuration file for GolangCI-Lint
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - errcheck  # Check for unchecked errors
+    - govet     # Report suspicious constructs
+    - staticcheck  # Advanced checks for correctness
+    - gosimple  # Simplify code
+
+linters-settings:
+  errcheck:
+    # Exclude specific functions from errcheck (optional)
+    exclude-functions:
+      - os:Close
+      - io:Close
+
+issues:
+  exclude-rules:
+    # Exclude errors from generated files, like *_gen.go or *_generated.go
+    - path: _gen.go
+      linters:
+        - errcheck
+        - govet
+    - path: _generated.go
+      linters:
+        - staticcheck
+    - path: .pg.go
+      linters:
+        - staticcheck

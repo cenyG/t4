@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Upload</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        .container {
+            max-width: 500px;
+            margin: 0 auto;
+        }
+        h1 {
+            text-align: center;
+        }
+        form {
+            margin-top: 20px;
+        }
+        input[type="file"] {
+            display: block;
+            margin-bottom: 20px;
+        }
+        button {
+            display: block;
+            width: 100%;
+            padding: 10px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Upload File</h1>
+    <form id="uploadForm" enctype="multipart/form-data">
+        <input type="file" id="fileInput" name="file" required>
+        <button type="submit">Upload</button>
+    </form>
+    <p id="result"></p>
+
+    <h1>File Downloader</h1>
+    <p>Enter the file ID to download:</p>
+    <input type="text" id="fileId" placeholder="Enter file ID" />
+    <button onclick="downloadFile()">Download</button>
+</div>
+
+<script>
+    const filesUrl = 'http://localhost:8080/files/'
+
+    document.getElementById('uploadForm').addEventListener('submit', function(event) {
+        event.preventDefault();
+
+        const formData = new FormData();
+        const fileInput = document.getElementById('fileInput');
+        formData.append('file', fileInput.files[0]);
+
+        fetch(filesUrl, {
+            method: 'POST',
+            body: formData
+        })
+            .then(response => response.text())
+            .then(result => {
+                document.getElementById('result').textContent = result;
+            })
+            .catch(error => {
+                document.getElementById('result').textContent = 'Error uploading file';
+            });
+    });
+
+    function downloadFile() {
+        const fileId = document.getElementById('fileId').value;
+
+        // Проверяем, что поле не пустое
+        if (!fileId) {
+            alert('Please enter a file ID');
+            return;
+        }
+
+        // URL for file downloading
+        const downloadUrl = `${filesUrl}${fileId}`;
+
+        // Open in new window
+        window.open(downloadUrl, '_blank');
+    }
+</script>
+</body>
+</html>

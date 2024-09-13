@@ -1,16 +1,19 @@
 package usecase
 
-import "T4_test_case/internal/restserver/services"
+import (
+	"T4_test_case/internal/restserver/repo"
+	"T4_test_case/internal/restserver/services"
+)
 
 type Provider interface {
 	GetDownloadFileUseCase() DownloadFileUseCase
 	GetUploadFileUseCase() UploadFileUseCase
 }
 
-func NewUseCaseProvider(storageServersProvider services.StorageServersProvider) Provider {
+func NewUseCaseProvider(storageServersProvider services.StorageServersProvider, fileRepo repo.FileRepository) Provider {
 	return &useCaseProvider{
-		downloadUseCase:   NewDownloadFileUseCase(),
-		uploadFileUseCase: NewUploadFileUseCase(storageServersProvider),
+		downloadUseCase:   NewDownloadFileUseCase(storageServersProvider, fileRepo),
+		uploadFileUseCase: NewUploadFileUseCase(storageServersProvider, fileRepo),
 	}
 }
 
