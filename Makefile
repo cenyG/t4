@@ -12,9 +12,16 @@ dc-main:
 dc-store:
 	docker-compose -f docker-compose-storages.yml up --build
 
+dc-store-more:
+	docker-compose -f docker-compose-storages-more.yml up --build
+
 dcd:
 	docker-compose -f docker-compose-main.yml down
 	docker-compose -f docker-compose-storages.yml down
+	docker-compose -f docker-compose-storages-more.yml down
 
 migrate-up:
 	goose -dir migrations postgres "user=user password=password dbname=t4 sslmode=disable" up
+
+lint:
+	golangci-lint run

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync"
 	"time"
 
@@ -74,14 +75,15 @@ func (sr *storageServersProvider) updateServer() {
 	}
 
 	for _, service := range services {
-		id, host, port := service.Service.ID, service.Service.Address, service.Service.Port
+		id, port := service.Service.ID, service.Service.Port
+		dockerName := strings.Replace(id, ".", "", -1)
 
 		if _, ok := sr.servers.Get(id); !ok {
-			slog.Info(fmt.Sprintf("[StorageServersProvider] fetch new storage server: %s - %s:%d", id, host, port))
+			slog.Info(fmt.Sprintf("[StorageServersProvider] fetch new storage server: %s - %s:%d", id, dockerName, port))
 
-			client, cErr := pb.NewChunkStorageClient(host, port, id)
+			client, cErr := pb.NewChunkStorageClient(dockerName, port, id)
 			if cErr != nil {
-				slog.Error(fmt.Sprintf("[StorageServersProvider] pb.NewChunkStorageClient(%s, %d, %s) error: %v", host, port, id, cErr))
+				slog.Error(fmt.Sprintf("[StorageServersProvider] pb.NewChunkStorageClient(%s, %d, %s) error: %v", dockerName, port, id, cErr))
 				return
 			}
 			sr.servers.Set(id, client)

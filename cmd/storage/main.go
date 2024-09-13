@@ -25,7 +25,7 @@ func main() {
 	service, postfix := parts[0], parts[1]
 
 	// register http health check for Consul
-	consul.RunHttpHealthCheck(healthCheckPort)
+	go consul.RunHttpHealthCheck(healthCheckPort)
 
 	// register service in Consul
 	consulClient, err := consul.NewConsulWrapper()

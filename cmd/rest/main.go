@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"log/slog"
 	"os"
@@ -48,15 +49,16 @@ func main() {
 
 	select {
 	case s := <-interrupt:
-		slog.Error("[main] signal %s", s)
+		slog.Error(fmt.Sprintf("[main] signal %s", s))
+		cancel()
 	case err = <-httpServer.Notify():
-		slog.Error("[main] httpServer.Notify: %v", err)
+		slog.Error(fmt.Sprintf("[main] httpServer.Notify: %v", err))
+		cancel()
 	}
 
 	// Shutdown
-	cancel()
 	err = httpServer.Shutdown()
 	if err != nil {
-		slog.Error("[main] httpServer.Shutdown: %v", err)
+		slog.Error(fmt.Sprintf("[main] httpServer.Shutdown: %v", err))
 	}
 }

@@ -47,6 +47,12 @@ make g
     make dc-store
     ```
 
+3. Optional: You can add more Storage servers by:
+
+    ```bash
+    make dc-store-more
+    ```
+
 ### Step 3: Run migrations
 
 When Postgres up and running you have to run migrations locally:

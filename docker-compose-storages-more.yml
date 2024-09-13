@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  # Seventh storage instance
+  storage7:
+    build:
+      context: .
+      target: storage
+    ports:
+      - "50057:50057"
+    environment:
+      - STORAGE_NAME=storage.7
+      - STORAGE_PORT=50057
+      - CONSUL_HTTP_ADDR=http://consul:8500
+    volumes:
+      - ./data/s7:/app/files
+
+  # Eighth storage instance
+  storage8:
+    build:
+      context: .
+      target: storage
+    ports:
+      - "50058:50058"
+    environment:
+      - STORAGE_NAME=storage.8
+      - STORAGE_PORT=50058
+      - CONSUL_HTTP_ADDR=http://consul:8500
+    volumes:
+      - ./data/s8:/app/files
+
+  # Ninth storage instance
+  storage9:
+    build:
+      context: .
+      target: storage
+    ports:
+      - "50059:50059"
+    environment:
+      - STORAGE_NAME=storage.9
+      - STORAGE_PORT=50059
+      - CONSUL_HTTP_ADDR=http://consul:8500
+    volumes:
+      - ./data/s9:/app/files

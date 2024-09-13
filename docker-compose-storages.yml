@@ -45,3 +45,45 @@ services:
     # Just for testing
     volumes:
       - ./data/s3:/app/files
+
+  # Fourth storage instance
+  storage4:
+    build:
+      context: .
+      target: storage
+    ports:
+      - "50054:50054"
+    environment:
+      - STORAGE_NAME=storage.4
+      - STORAGE_PORT=50054
+      - CONSUL_HTTP_ADDR=http://consul:8500
+    volumes:
+      - ./data/s4:/app/files
+
+  # Fifth storage instance
+  storage5:
+    build:
+      context: .
+      target: storage
+    ports:
+      - "50055:50055"
+    environment:
+      - STORAGE_NAME=storage.5
+      - STORAGE_PORT=50055
+      - CONSUL_HTTP_ADDR=http://consul:8500
+    volumes:
+      - ./data/s5:/app/files
+
+  # Sixth storage instance
+  storage6:
+    build:
+      context: .
+      target: storage
+    ports:
+      - "50056:50056"
+    environment:
+      - STORAGE_NAME=storage.6
+      - STORAGE_PORT=50056
+      - CONSUL_HTTP_ADDR=http://consul:8500
+    volumes:
+      - ./data/s6:/app/files
