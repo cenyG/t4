@@ -53,15 +53,7 @@ make g
     make dc-store-more
     ```
 
-### Step 3: Run migrations
-
-When Postgres up and running you have to run migrations locally:
-
-```bash
-make migrate-up
-```
-
-### Step 4: Test with Web
+### Step 3: Test with Web
 
 Once everything is set up and running, you can go to the following URLs to test the application:
 - [http://127.0.0.1:8081/](http://127.0.0.1:8081/)

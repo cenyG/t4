@@ -1,12 +1,13 @@
 package handlers
 
 import (
+	"fmt"
+	"strconv"
+
 	"T4_test_case/internal/restserver/repo"
 	"T4_test_case/internal/restserver/usecase"
-	"fmt"
 	"github.com/gin-gonic/gin"
 	"net/http"
-	"strconv"
 )
 
 type downloadFileHandler struct {
@@ -18,9 +19,9 @@ func NewDownloadFileHandler(useCase usecase.DownloadFileUseCase, repo repo.FileR
 	return &downloadFileHandler{useCase, repo}
 }
 
+// Handle - download handler
 func (d *downloadFileHandler) Handle(c *gin.Context) {
-	fileId := c.Param("id")
-	id, err := strconv.ParseInt(fileId, 10, 64)
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		failResponse(c, 500, fmt.Sprintf("error while parsing id (must be int): %v", err))
 		return
@@ -36,7 +37,7 @@ func (d *downloadFileHandler) Handle(c *gin.Context) {
 	c.Header("Content-Disposition", "attachment; filename="+file.Name)
 	c.Header("Content-Type", "application/octet-stream")
 
-	// Проходим по всем серверам и запрашиваем части файла
+	// Start file downloading
 	err = d.useCase.Download(c, file, c.Writer)
 	if err != nil {
 		failResponse(c, 500, fmt.Sprintf("fail while file loading: %v", err))

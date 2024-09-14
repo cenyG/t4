@@ -1,6 +1,5 @@
 g:
-	protoc --go_out=./internal/restserver --go-grpc_out=./internal/restserver ./protos/chunk_storage.proto
-	protoc --go_out=./internal/storageserver --go-grpc_out=./internal/storageserver ./protos/chunk_storage.proto
+	protoc --go_out=. --go-grpc_out=. ./protos/chunk_storage.proto
 
 build-docker-images:
 	docker build -t t4/storage --target storage .
@@ -15,12 +14,16 @@ dc-store:
 dc-store-more:
 	docker-compose -f docker-compose-storages-more.yml up --build
 
-dcd:
+dc-clean:
 	docker-compose -f docker-compose-main.yml down
+	docker-compose -f docker-compose-main.yml down -v
 	docker-compose -f docker-compose-storages.yml down
 	docker-compose -f docker-compose-storages-more.yml down
 
 migrate-up:
+	goose -dir migrations postgres "user=$(POSTGRES_USER) password=$(POSTGRES_PASSWORD) dbname=$(POSTGRES_DB) host=$(POSTGRES_HOST) port=$(POSTGRES_PORT) sslmode=disable" up
+
+migrate-up-dev:
 	goose -dir migrations postgres "user=user password=password dbname=t4 sslmode=disable" up
 
 lint:

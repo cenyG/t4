@@ -9,14 +9,14 @@ import (
 	"time"
 
 	"T4_test_case/config"
-	"T4_test_case/internal/restserver/pb"
+	"T4_test_case/internal/restserver/grpc"
 	"T4_test_case/pkg/consul"
 	"github.com/samber/lo"
 )
 
 type StorageServersProvider interface {
-	GetStorageServersGrpcClients() []pb.ChunkStorageClient
-	GetStorageServersGrpcClientsMap() map[string]pb.ChunkStorageClient
+	GetStorageServersGrpcClients() []grpc.ChunkStorageClient
+	GetStorageServersGrpcClientsMap() map[string]grpc.ChunkStorageClient
 }
 
 type storageServersProvider struct {
@@ -33,7 +33,7 @@ func NewStorageServersProvider(ctx context.Context) (StorageServersProvider, err
 	ssr := storageServersProvider{
 		consulWrapper: consulWrapper,
 		servers: concurrentMap{
-			m: make(map[string]pb.ChunkStorageClient, 6),
+			m: make(map[string]grpc.ChunkStorageClient, 6),
 		},
 	}
 	ssr.updateServersWorker(ctx)
@@ -41,11 +41,11 @@ func NewStorageServersProvider(ctx context.Context) (StorageServersProvider, err
 	return &ssr, nil
 }
 
-func (sr *storageServersProvider) GetStorageServersGrpcClients() []pb.ChunkStorageClient {
+func (sr *storageServersProvider) GetStorageServersGrpcClients() []grpc.ChunkStorageClient {
 	return sr.servers.Values()
 }
 
-func (sr *storageServersProvider) GetStorageServersGrpcClientsMap() map[string]pb.ChunkStorageClient {
+func (sr *storageServersProvider) GetStorageServersGrpcClientsMap() map[string]grpc.ChunkStorageClient {
 	return sr.servers.Clone()
 }
 
@@ -81,7 +81,7 @@ func (sr *storageServersProvider) updateServer() {
 		if _, ok := sr.servers.Get(id); !ok {
 			slog.Info(fmt.Sprintf("[StorageServersProvider] fetch new storage server: %s - %s:%d", id, dockerName, port))
 
-			client, cErr := pb.NewChunkStorageClient(dockerName, port, id)
+			client, cErr := grpc.NewChunkStorageClient(dockerName, port, id)
 			if cErr != nil {
 				slog.Error(fmt.Sprintf("[StorageServersProvider] pb.NewChunkStorageClient(%s, %d, %s) error: %v", dockerName, port, id, cErr))
 				return
@@ -94,33 +94,33 @@ func (sr *storageServersProvider) updateServer() {
 
 type concurrentMap struct {
 	mu sync.RWMutex
-	m  map[string]pb.ChunkStorageClient
+	m  map[string]grpc.ChunkStorageClient
 }
 
-func (c *concurrentMap) Get(key string) (pb.ChunkStorageClient, bool) {
+func (c *concurrentMap) Get(key string) (grpc.ChunkStorageClient, bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	v, ok := c.m[key]
 	return v, ok
 }
 
-func (c *concurrentMap) Values() []pb.ChunkStorageClient {
+func (c *concurrentMap) Values() []grpc.ChunkStorageClient {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 	return lo.Values(c.m)
 }
 
-func (c *concurrentMap) Clone() map[string]pb.ChunkStorageClient {
+func (c *concurrentMap) Clone() map[string]grpc.ChunkStorageClient {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
 
 	// create new map with same values
-	return lo.PickBy(c.m, func(key string, value pb.ChunkStorageClient) bool {
+	return lo.PickBy(c.m, func(key string, value grpc.ChunkStorageClient) bool {
 		return true
 	})
 }
 
-func (c *concurrentMap) Set(key string, val pb.ChunkStorageClient) {
+func (c *concurrentMap) Set(key string, val grpc.ChunkStorageClient) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.m[key] = val

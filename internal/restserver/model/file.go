@@ -2,6 +2,7 @@ package model
 
 import "time"
 
+// File - model to store file name and storage servers info
 type File struct {
 	Id        int64     `db:"id"`
 	Name      string    `db:"name"`

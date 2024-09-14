@@ -1,4 +1,4 @@
-package pb
+package service
 
 import (
 	"T4_test_case/config"
@@ -9,7 +9,7 @@ import (
 	"os"
 	"path/filepath"
 
-	desc "T4_test_case/internal/storageserver/pb/chunkstorage"
+	desc "T4_test_case/pb/chunkstorage"
 )
 
 const (
@@ -24,13 +24,13 @@ func NewChunkStorageService() *Implementation {
 	return &Implementation{}
 }
 
-// UploadChunk - upload file chunk
+// UploadChunk - endpoint read file chunk from stream and save to file
 func (i *Implementation) UploadChunk(stream desc.ChunkStorage_UploadChunkServer) error {
 	slog.Info(fmt.Sprintf("start upload chunk on %s", config.Cfg.Storage.Name))
 
 	var file *os.File
 	for {
-		// Чтение данных из потока
+		// Read data from steam
 		chunk, err := stream.Recv()
 		if err == io.EOF {
 			break
@@ -66,7 +66,7 @@ func (i *Implementation) UploadChunk(stream desc.ChunkStorage_UploadChunkServer)
 	return stream.SendAndClose(&desc.UploadChunkResponse{})
 }
 
-// DownloadChunk - upload file chunk
+// DownloadChunk - endpoint read file chunk from local storage and send to stream
 func (i *Implementation) DownloadChunk(req *desc.DownloadChunkRequest, stream desc.ChunkStorage_DownloadChunkServer) error {
 	fileName := fmt.Sprintf("%s/%s.%d", _filesPath, req.GetFileName(), req.GetChunkIndex())
 
@@ -76,7 +76,7 @@ func (i *Implementation) DownloadChunk(req *desc.DownloadChunkRequest, stream de
 	}
 	defer file.Close()
 
-	buf := make([]byte, 1024)
+	buf := make([]byte, 1024*1024)
 	for {
 		n, err := file.Read(buf)
 		if err == io.EOF {

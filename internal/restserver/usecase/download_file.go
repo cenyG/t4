@@ -26,6 +26,7 @@ func NewDownloadFileUseCase(storageServersProvider services.StorageServersProvid
 	}
 }
 
+// Download - download file chunks from store servers and proxy them to writer
 func (d *downloadFileUseCase) Download(ctx context.Context, file *model.File, writer io.Writer) error {
 	storageServers := strings.Split(file.Servers, ",")
 	storageServersMap := d.storageServersProvider.GetStorageServersGrpcClientsMap()

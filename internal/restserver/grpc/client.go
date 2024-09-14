@@ -1,11 +1,11 @@
-package pb
+package grpc
 
 import (
 	"context"
 	"io"
 	"strconv"
 
-	desc "T4_test_case/internal/restserver/pb/chunkstorage"
+	desc "T4_test_case/pb/chunkstorage"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -17,7 +17,7 @@ type ChunkStorageClient interface {
 	GetServiceID() string
 }
 
-// ChunkStorageClient .
+// chunkStorageClient - grpc client
 type chunkStorageClient struct {
 	client    desc.ChunkStorageClient
 	serviceId string

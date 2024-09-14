@@ -13,6 +13,7 @@ func NewUploadFileHandler(useCase usecase.UploadFileUseCase) Handler {
 	return &uploadFileHandler{useCase}
 }
 
+// Handle - upload file handler
 func (h *uploadFileHandler) Handle(c *gin.Context) {
 	file, fileHeader, err := c.Request.FormFile("file")
 	if err != nil {
@@ -21,6 +22,7 @@ func (h *uploadFileHandler) Handle(c *gin.Context) {
 	}
 	defer file.Close()
 
+	// start uploading
 	id, err := h.useCase.Upload(c, file, fileHeader.Filename, fileHeader.Size)
 	if err != nil {
 		failResponse(c, 500, err.Error())

@@ -4,8 +4,6 @@ rest:
   update_storage_servers_timeout: 5s
 
 storage:
-#  name: 'storage.1'
-#  port: '50051'
 
 common:
   consul_address: 'consul:8500'

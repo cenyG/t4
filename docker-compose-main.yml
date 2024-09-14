@@ -27,6 +27,21 @@ services:
     volumes:
       - pg_data:/var/lib/postgresql/data
 
+  # Postgres migration
+  migration:
+    build:
+      context: .
+      target: builder
+    environment:
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=t4
+      - POSTGRES_HOST=pg
+      - POSTGRES_PORT=5432
+    depends_on:
+      - pg
+    command: [ "/build/scripts/wait-for.sh", "pg:5432", "--", "make", "migrate-up" ]
+
   # REST server
   rest:
     build:
@@ -37,6 +52,8 @@ services:
     depends_on:
       - consul
       - pg
+      - migration
+    command: ["/app/scripts/wait-for.sh", "pg:5432", "--", "./rest"]
     environment:
       - CONSUL_HTTP_ADDR=http://consul:8500
       - POSTGRES_HOST=pg

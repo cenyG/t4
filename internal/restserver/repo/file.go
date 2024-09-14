@@ -18,7 +18,7 @@ type fileRepository struct {
 	store db.Store
 }
 
-// SaveFile .
+// SaveFile - save file to db
 func (f *fileRepository) SaveFile(ctx context.Context, file model.File) (int64, error) {
 	sql, args, err := sq.Insert(file.Table()).
 		PlaceholderFormat(sq.Dollar).
@@ -38,7 +38,7 @@ func (f *fileRepository) SaveFile(ctx context.Context, file model.File) (int64, 
 	return id, nil
 }
 
-// GetFile .
+// GetFile - get file by id from db
 func (f *fileRepository) GetFile(ctx context.Context, id int64) (*model.File, error) {
 	file := model.File{}
 	sql, args, err := sq.Select("*").

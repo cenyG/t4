@@ -29,6 +29,7 @@ func NewUploadFileUseCase(storageServersResolver services.StorageServersProvider
 	}
 }
 
+// Upload - read file from use Reader and proxy chunks to storage servers
 func (u *uploadFileUseCase) Upload(ctx context.Context, reader io.Reader, filename string, size int64) (int64, error) {
 	slog.Info("[uploadFileUseCase] start upload file")
 
