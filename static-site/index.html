@@ -27,6 +27,8 @@
             display: block;
             width: 100%;
             padding: 10px;
+            margin-top: 10px;
+            border-bottom: 10px;
             background-color: #4CAF50;
             color: white;
             border: none;
@@ -44,6 +46,8 @@
         <input type="file" id="fileInput" name="file" required>
         <button type="submit">Upload</button>
     </form>
+    <button style="background-color: indianred" id="stopButton">Stop Upload</button>
+    <p id="progress"></p>
     <p id="result"></p>
 
     <h1>File Downloader</h1>
@@ -55,25 +59,46 @@
 <script>
     const filesUrl = 'http://localhost:8080/files/'
 
-    document.getElementById('uploadForm').addEventListener('submit', function(event) {
+    document.getElementById('uploadForm').addEventListener('submit', (event) => {
         event.preventDefault();
+        startUpload()
+    });
 
+    function startUpload() {
         const formData = new FormData();
         const fileInput = document.getElementById('fileInput');
         formData.append('file', fileInput.files[0]);
 
-        fetch(filesUrl, {
-            method: 'POST',
-            body: formData
-        })
-            .then(response => response.text())
-            .then(result => {
-                document.getElementById('result').textContent = result;
-            })
-            .catch(error => {
-                document.getElementById('result').textContent = 'Error uploading file';
-            });
-    });
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', filesUrl, true);
+
+        xhr.upload.onprogress = function(event) {
+            document.getElementById('progress').textContent = `Uploaded ${event.loaded} of ${event.total} bytes`;
+        };
+
+        xhr.onload = function() {
+            document.getElementById('result').textContent = xhr.responseText;
+        }
+
+        // Start the upload
+        xhr.send(formData);
+
+        document.getElementById('stopButton').onclick = () => {
+            console.log("stop")
+            if (xhr.readyState !== XMLHttpRequest.DONE) { // Ensure the request is still ongoing
+                xhr.abort();
+                console.log('Upload aborted');
+            }
+        }
+    }
+
+    // Function to stop the upload
+    function stopUpload() {
+        if (xhr.readyState !== XMLHttpRequest.DONE) { // Ensure the request is still ongoing
+            xhr.abort();
+            console.log('Upload aborted');
+        }
+    }
 
     function downloadFile() {
         const fileId = document.getElementById('fileId').value;

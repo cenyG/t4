@@ -20,6 +20,7 @@ import (
 )
 
 func main() {
+	config.Init()
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// Services

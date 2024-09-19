@@ -4,12 +4,15 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"T4_test_case/config"
 	"T4_test_case/internal/restserver/grpc"
+	"T4_test_case/internal/restserver/model"
+	desc "T4_test_case/pb/chunkstorage"
+	"T4_test_case/pkg/collections"
 	"T4_test_case/pkg/consul"
 	"github.com/samber/lo"
 )
@@ -21,7 +24,8 @@ type StorageServersProvider interface {
 
 type storageServersProvider struct {
 	consulWrapper consul.ConsulWrapper
-	servers       concurrentMap
+	serversMap    collections.ConcurrentMap[string, grpc.ChunkStorageClient]
+	serversStats  collections.ConcurrentArray[model.ServerInfo]
 }
 
 func NewStorageServersProvider(ctx context.Context) (StorageServersProvider, error) {
@@ -32,53 +36,65 @@ func NewStorageServersProvider(ctx context.Context) (StorageServersProvider, err
 
 	ssr := storageServersProvider{
 		consulWrapper: consulWrapper,
-		servers: concurrentMap{
-			m: make(map[string]grpc.ChunkStorageClient, 6),
-		},
+		serversMap:    collections.NewConcurrentMap[string, grpc.ChunkStorageClient](6),
+		serversStats:  collections.NewConcurrentArray[model.ServerInfo](6),
 	}
 	ssr.updateServersWorker(ctx)
 
 	return &ssr, nil
 }
 
-func (sr *storageServersProvider) GetStorageServersGrpcClients() []grpc.ChunkStorageClient {
-	return sr.servers.Values()
+// GetStorageServersGrpcClients - get first N servers with the highest available storage
+func (s *storageServersProvider) GetStorageServersGrpcClients() []grpc.ChunkStorageClient {
+	serversMap := s.serversMap.Clone()
+
+	infos := s.serversStats.Values()[0:config.Cfg.StorageServersCount]
+	infos = lo.Shuffle(infos) // shuffle to randomize serversMap order for more load balancing
+
+	res := make([]grpc.ChunkStorageClient, len(infos))
+	for _, info := range infos {
+		res = append(res, serversMap[info.ServerID])
+	}
+
+	return s.serversMap.Values()
 }
 
-func (sr *storageServersProvider) GetStorageServersGrpcClientsMap() map[string]grpc.ChunkStorageClient {
-	return sr.servers.Clone()
+func (s *storageServersProvider) GetStorageServersGrpcClientsMap() map[string]grpc.ChunkStorageClient {
+	return s.serversMap.Clone()
 }
 
-func (sr *storageServersProvider) updateServersWorker(ctx context.Context) {
+func (s *storageServersProvider) updateServersWorker(ctx context.Context) {
 	go func() {
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			default:
-				sr.updateServer()
+				s.updateServersConsul()
+				s.updateServersStats(ctx)
 			}
 
-			time.Sleep(config.Cfg.UpdateStorageServersTimeout)
+			time.Sleep(config.Cfg.UpdateStorageServersInterval)
 		}
 	}()
 }
 
-func (sr *storageServersProvider) updateServer() {
-	services, err := sr.consulWrapper.GetServices("storage")
+// updateServersConsul - fetch health serversMap from Consul and update only if found new server
+func (s *storageServersProvider) updateServersConsul() {
+	services, err := s.consulWrapper.GetServices("storage")
 	if err != nil {
-		slog.Error(fmt.Sprintf("[StorageServersProvider] sr.consulWrapper.Health().Service() error: %v", err))
+		slog.Error(fmt.Sprintf("[StorageServersProvider] s.consulWrapper.Health().Service() error: %v", err))
 		return
 	}
 	if len(services) == 0 {
-		slog.Error("[StorageServersProvider] don't found storage servers")
+		slog.Error("[StorageServersProvider] don't found storage serversMap")
 	}
 
 	for _, service := range services {
 		id, port := service.Service.ID, service.Service.Port
 		dockerName := strings.Replace(id, ".", "", -1)
 
-		if _, ok := sr.servers.Get(id); !ok {
+		if _, ok := s.serversMap.Get(id); !ok {
 			slog.Info(fmt.Sprintf("[StorageServersProvider] fetch new storage server: %s - %s:%d", id, dockerName, port))
 
 			client, cErr := grpc.NewChunkStorageClient(dockerName, port, id)
@@ -86,42 +102,34 @@ func (sr *storageServersProvider) updateServer() {
 				slog.Error(fmt.Sprintf("[StorageServersProvider] pb.NewChunkStorageClient(%s, %d, %s) error: %v", dockerName, port, id, cErr))
 				return
 			}
-			sr.servers.Set(id, client)
+			s.serversMap.Set(id, client)
 		}
 	}
-
 }
 
-type concurrentMap struct {
-	mu sync.RWMutex
-	m  map[string]grpc.ChunkStorageClient
-}
+// updateServersStorage - update serversMap info from grpc clients and write sorted by ServerInfo.Avail array
+func (s *storageServersProvider) updateServersStats(ctx context.Context) {
+	serversMap := s.serversMap.Clone()
+	serversStats := make([]model.ServerInfo, len(serversMap))
 
-func (c *concurrentMap) Get(key string) (grpc.ChunkStorageClient, bool) {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	v, ok := c.m[key]
-	return v, ok
-}
+	for _, server := range serversMap {
+		resp, err := server.ServerStats(ctx, &desc.ServerStatsRequest{})
+		if err != nil {
+			slog.Error(fmt.Sprintf("[StorageServersProvider] error while get stats for server %s: %v", server.ServiceID(), err))
+			continue
+		}
 
-func (c *concurrentMap) Values() []grpc.ChunkStorageClient {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return lo.Values(c.m)
-}
+		serversStats = append(serversStats, model.ServerInfo{
+			ServerID: server.ServiceID(),
+			Total:    resp.DiscTotal,
+			Avail:    resp.DiscAvail,
+			Used:     resp.DiscUsed,
+		})
+	}
 
-func (c *concurrentMap) Clone() map[string]grpc.ChunkStorageClient {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-
-	// create new map with same values
-	return lo.PickBy(c.m, func(key string, value grpc.ChunkStorageClient) bool {
-		return true
+	sort.Slice(serversStats, func(i, j int) bool {
+		return serversStats[i].Avail > serversStats[j].Avail
 	})
-}
 
-func (c *concurrentMap) Set(key string, val grpc.ChunkStorageClient) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.m[key] = val
+	s.serversStats.SetAll(serversStats)
 }

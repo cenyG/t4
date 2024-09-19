@@ -9,6 +9,10 @@ service ChunkStorage {
   rpc UploadChunk (stream UploadChunkRequest) returns (UploadChunkResponse);
   // Load file part from store server
   rpc DownloadChunk(DownloadChunkRequest) returns (stream DownloadChunkResponse);
+  // Delete file part from store server
+  rpc DeleteChunk(DeleteChunkRequest) returns (DeleteChunkResponse);
+  // Load file part from store server
+  rpc ServerStats(ServerStatsRequest) returns (ServerStatsResponse);
 }
 
 // UploadChunkRequest
@@ -37,3 +41,27 @@ message DownloadChunkResponse {
   // Chunk bytes
   bytes data = 1;
 }
+
+// UploadChunkRequest
+message ServerStatsRequest {}
+
+// DownloadChunkResponse
+message ServerStatsResponse {
+  // Storage total disc space
+  uint64 disc_total = 1;
+  // Storage free disc space
+  uint64 disc_used = 2;
+  // Storage free disc space
+  uint64 disc_avail = 3;
+}
+
+// DeleteChunkRequest
+message DeleteChunkRequest {
+  // File name
+  string file_name = 1;
+  // Chunk index
+  int32 chunk_index = 2;
+}
+
+// DeleteChunkResponse
+message DeleteChunkResponse {}

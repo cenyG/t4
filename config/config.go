@@ -33,9 +33,11 @@ type (
 
 	// Rest .
 	Rest struct {
-		Name                        string        `env-required:"true" yaml:"name"    env:"REST_NAME"`
-		Port                        string        `env-required:"true" yaml:"port" env:"HTTP_PORT"`
-		UpdateStorageServersTimeout time.Duration `env-required:"true" yaml:"update_storage_servers_timeout" env:"UPDATE_STORAGE_SERVERS_TIMEOUT"`
+		Name                         string        `env-required:"true" yaml:"name"    env:"REST_NAME"`
+		Port                         string        `env-required:"true" yaml:"port" env:"HTTP_PORT"`
+		UpdateStorageServersInterval time.Duration `yaml:"update_storage_servers_interval" env:"UPDATE_STORAGE_SERVERS_INTERVAL" env-default:"10s"`
+		StorageServersCount          int32         `yaml:"storage_servers_count" env:"STORAGE_SERVERS_COUNT" env-default:"6"`
+		UploadBytesWaitTime          time.Duration `yaml:"upload_bytes_wait_time" env:"UPLOAD_BYTES_WAIT_TIME" env-default:"15s"`
 	}
 
 	// Storage .
@@ -45,7 +47,7 @@ type (
 	}
 )
 
-func init() {
+func Init() {
 	err := cleanenv.ReadConfig("./config/config.yml", &Cfg)
 	if err != nil {
 		panic("can't read config file: " + err.Error())

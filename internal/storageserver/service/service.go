@@ -2,14 +2,17 @@ package service
 
 import (
 	"T4_test_case/config"
+	desc "T4_test_case/pb/chunkstorage"
+	"context"
 	"fmt"
 	"github.com/pkg/errors"
+	"github.com/ricochet2200/go-disk-usage/du"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"io"
 	"log/slog"
 	"os"
 	"path/filepath"
-
-	desc "T4_test_case/pb/chunkstorage"
 )
 
 const (
@@ -26,11 +29,11 @@ func NewChunkStorageService() *Implementation {
 
 // UploadChunk - endpoint read file chunk from stream and save to file
 func (i *Implementation) UploadChunk(stream desc.ChunkStorage_UploadChunkServer) error {
-	slog.Info(fmt.Sprintf("start upload chunk on %s", config.Cfg.Storage.Name))
+	slog.Info(fmt.Sprintf("[Upload] start upload chunk to %s", config.Cfg.Storage.Name))
 
 	var file *os.File
 	for {
-		// Read data from steam
+		// read data from steam
 		chunk, err := stream.Recv()
 		if err == io.EOF {
 			break
@@ -39,18 +42,19 @@ func (i *Implementation) UploadChunk(stream desc.ChunkStorage_UploadChunkServer)
 			return err
 		}
 
-		fileName := chunk.GetFileName()
-		chunkIndex := chunk.GetChunkIndex()
+		fileName, chunkIndex := chunk.GetFileName(), chunk.GetChunkIndex()
 
-		// Create file
+		// create file
 		if file == nil {
-			err := os.MkdirAll(_filesPath, os.ModePerm)
+			err = os.MkdirAll(_filesPath, os.ModePerm)
 			if err != nil {
+				slog.Info(fmt.Sprintf("[Upload] os.MkdirAll err: %v", err))
 				return err
 			}
-			filePath := filepath.Join(_filesPath, fmt.Sprintf("%s.%d", fileName, chunkIndex))
+			filePath := getFilePath(fileName, chunkIndex)
 			file, err = os.Create(filePath)
 			if err != nil {
+				slog.Info(fmt.Sprintf("[Upload] os.Create err: %v", err))
 				return err
 			}
 			defer file.Close()
@@ -59,17 +63,21 @@ func (i *Implementation) UploadChunk(stream desc.ChunkStorage_UploadChunkServer)
 		// Write chunk to file
 		_, err = file.Write(chunk.GetChunkData())
 		if err != nil {
+			slog.Info(fmt.Sprintf("[Upload] file.Write err: %v", err))
 			return err
 		}
 	}
+
+	slog.Info(fmt.Sprintf("[Upload] success chunk uploaded to %s", config.Cfg.Storage.Name))
 
 	return stream.SendAndClose(&desc.UploadChunkResponse{})
 }
 
 // DownloadChunk - endpoint read file chunk from local storage and send to stream
 func (i *Implementation) DownloadChunk(req *desc.DownloadChunkRequest, stream desc.ChunkStorage_DownloadChunkServer) error {
-	fileName := fmt.Sprintf("%s/%s.%d", _filesPath, req.GetFileName(), req.GetChunkIndex())
+	slog.Info(fmt.Sprintf("[Download] start download chunk from %s", config.Cfg.Storage.Name))
 
+	fileName := getFilePath(req.GetFileName(), req.GetChunkIndex())
 	file, err := os.Open(fileName)
 	if err != nil {
 		return errors.Wrapf(err, "failed to open chunk file: %s", fileName)
@@ -83,14 +91,45 @@ func (i *Implementation) DownloadChunk(req *desc.DownloadChunkRequest, stream de
 			break
 		}
 		if err != nil {
-			return fmt.Errorf("failed to read file part: %v", err)
+			return status.Errorf(codes.Internal, "failed to read file part: %v", err)
 		}
 
 		// send data to client
 		if err := stream.Send(&desc.DownloadChunkResponse{Data: buf[:n]}); err != nil {
-			return fmt.Errorf("failed to send file part: %v", err)
+			return status.Errorf(codes.Internal, "failed to send file part: %v", err)
 		}
 	}
 
+	slog.Info(fmt.Sprintf("[Download] success download chunk file %s from %s", fileName, config.Cfg.Storage.Name))
+
 	return nil
+}
+
+func (i *Implementation) DeleteChunk(_ context.Context, req *desc.DeleteChunkRequest) (*desc.DeleteChunkResponse, error) {
+	filePath := getFilePath(req.GetFileName(), req.ChunkIndex)
+	slog.Info(fmt.Sprintf("[Delete] start delete chunk file %s from %s", filePath, config.Cfg.Storage.Name))
+
+	err := os.Remove(filePath)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "os.Remove(%s) err: %v", filePath, err)
+	}
+
+	slog.Info(fmt.Sprintf("[Delete] success delete chunk file %s from %s", filePath, config.Cfg.Storage.Name))
+
+	return &desc.DeleteChunkResponse{}, nil
+}
+
+// ServerStats - server stats like disc space
+func (i *Implementation) ServerStats(context.Context, *desc.ServerStatsRequest) (*desc.ServerStatsResponse, error) {
+	info := du.NewDiskUsage(_filesPath)
+
+	return &desc.ServerStatsResponse{
+		DiscTotal: info.Size(),
+		DiscUsed:  info.Used(),
+		DiscAvail: info.Available(),
+	}, nil
+}
+
+func getFilePath(fileName string, chunkIndex int32) string {
+	return filepath.Join(_filesPath, fmt.Sprintf("%s.%d", fileName, chunkIndex))
 }

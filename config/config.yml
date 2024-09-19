@@ -1,7 +1,6 @@
 rest:
   name: 'rest-app'
   port: '8080'
-  update_storage_servers_timeout: 5s
 
 storage:
 

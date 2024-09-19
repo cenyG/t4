@@ -7,9 +7,11 @@ import (
 	"log/slog"
 	"strings"
 
+	"T4_test_case/internal/restserver/grpc"
 	"T4_test_case/internal/restserver/model"
 	"T4_test_case/internal/restserver/repo"
 	"T4_test_case/internal/restserver/services"
+	desc "T4_test_case/pb/chunkstorage"
 	"github.com/pkg/errors"
 )
 
@@ -31,7 +33,7 @@ func NewUploadFileUseCase(storageServersResolver services.StorageServersProvider
 
 // Upload - read file from use Reader and proxy chunks to storage servers
 func (u *uploadFileUseCase) Upload(ctx context.Context, reader io.Reader, filename string, size int64) (int64, error) {
-	slog.Info("[uploadFileUseCase] start upload file")
+	slog.Info("[UploadFileUseCase] start upload file")
 
 	storageServerClients := u.storageServersProvider.GetStorageServersGrpcClients()
 	storageClientsCount := int64(len(storageServerClients))
@@ -57,9 +59,11 @@ func (u *uploadFileUseCase) Upload(ctx context.Context, reader io.Reader, filena
 
 		err := storageClient.UploadChunkStream(ctx, filename, int32(i), limitedReader, currentChunkSize)
 		if err != nil {
+			// if error occurs delete already uploaded files from servers to optimize storage
+			go u.deleteChunks(storageServerClients[:i+1], filename)
 			return 0, errors.Wrap(err, "storageClient.UploadChunkStream")
 		}
-		storageServers = append(storageServers, storageClient.GetServiceID())
+		storageServers = append(storageServers, storageClient.ServiceID())
 	}
 
 	// save info about loaded file
@@ -68,11 +72,24 @@ func (u *uploadFileUseCase) Upload(ctx context.Context, reader io.Reader, filena
 		Servers: strings.Join(storageServers, ","),
 	})
 	if err != nil {
+		// may be delete files from storages
 		return 0, errors.Wrap(err, "u.fileRepo.SaveFile")
 	}
 
-	slog.Info(fmt.Sprintf("[uploadFileUseCase] file %s uploaded successfully", filename))
+	slog.Info(fmt.Sprintf("[UploadFileUseCase] file %s uploaded successfully", filename))
 
 	return id, nil
+}
 
+// deleteChunks - remove file from all servers if fail to proceed
+func (u *uploadFileUseCase) deleteChunks(clients []grpc.ChunkStorageClient, filename string) {
+	for index, client := range clients {
+		_, err := client.DeleteChunk(context.Background(), &desc.DeleteChunkRequest{
+			FileName:   filename,
+			ChunkIndex: int32(index),
+		})
+		if err != nil {
+			slog.Error(fmt.Sprintf("[UploadFileUseCase] file %s delete error: %v", filename, err))
+		}
+	}
 }

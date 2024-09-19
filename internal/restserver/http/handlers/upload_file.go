@@ -23,7 +23,7 @@ func (h *uploadFileHandler) Handle(c *gin.Context) {
 	defer file.Close()
 
 	// start uploading
-	id, err := h.useCase.Upload(c, file, fileHeader.Filename, fileHeader.Size)
+	id, err := h.useCase.Upload(c.Request.Context(), file, fileHeader.Filename, fileHeader.Size)
 	if err != nil {
 		failResponse(c, 500, err.Error())
 		return

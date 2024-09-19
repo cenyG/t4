@@ -5,7 +5,9 @@ import (
 	"io"
 	"strconv"
 
+	"T4_test_case/config"
 	desc "T4_test_case/pb/chunkstorage"
+	"T4_test_case/pkg/helper"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -14,7 +16,9 @@ import (
 type ChunkStorageClient interface {
 	UploadChunkStream(ctx context.Context, fileName string, chunkIndex int32, chunkData io.Reader, chunkSize int64) error
 	DownloadChunkStream(ctx context.Context, fileName string, chunkIndex int32, writer io.Writer) error
-	GetServiceID() string
+	ServerStats(ctx context.Context, req *desc.ServerStatsRequest) (*desc.ServerStatsResponse, error)
+	DeleteChunk(ctx context.Context, req *desc.DeleteChunkRequest) (*desc.DeleteChunkResponse, error)
+	ServiceID() string
 }
 
 // chunkStorageClient - grpc client
@@ -23,7 +27,12 @@ type chunkStorageClient struct {
 	serviceId string
 }
 
-func (s *chunkStorageClient) GetServiceID() string {
+type bufReadResult struct {
+	err error
+	n   int
+}
+
+func (s *chunkStorageClient) ServiceID() string {
 	return s.serviceId
 }
 
@@ -48,17 +57,18 @@ func (s *chunkStorageClient) UploadChunkStream(ctx context.Context, fileName str
 	if err != nil {
 		return errors.Wrap(err, "failed to create upload stream")
 	}
+	defer stream.CloseAndRecv()
 
 	buffer := make([]byte, 1024*1024)
 	totalSent := int64(0)
 
 	for totalSent < chunkSize {
-		n, readErr := chunkData.Read(buffer)
-		if readErr == io.EOF {
-			break
-		}
+		// close connection if user don't send anything for a long time
+		n, readErr := helper.WithTimeout[int](ctx, config.Cfg.Rest.UploadBytesWaitTime, func() (int, error) {
+			return chunkData.Read(buffer)
+		})
 		if readErr != nil {
-			return errors.Wrap(readErr, "failed to read chunk")
+			return errors.Wrap(readErr, "failed while read from client")
 		}
 
 		sendErr := stream.Send(&desc.UploadChunkRequest{
@@ -70,11 +80,6 @@ func (s *chunkStorageClient) UploadChunkStream(ctx context.Context, fileName str
 			return errors.Wrap(sendErr, "failed to send chunk")
 		}
 		totalSent += int64(n)
-	}
-
-	_, err = stream.CloseAndRecv()
-	if err != nil {
-		return errors.Wrap(err, "stream.CloseAndRecv()")
 	}
 
 	return nil
@@ -108,4 +113,14 @@ func (s *chunkStorageClient) DownloadChunkStream(ctx context.Context, fileName s
 	}
 
 	return nil
+}
+
+// ServerStats - server stats
+func (s *chunkStorageClient) ServerStats(ctx context.Context, req *desc.ServerStatsRequest) (*desc.ServerStatsResponse, error) {
+	return s.client.ServerStats(ctx, req)
+}
+
+// DeleteChunk - delete chunk from server
+func (s *chunkStorageClient) DeleteChunk(ctx context.Context, req *desc.DeleteChunkRequest) (*desc.DeleteChunkResponse, error) {
+	return s.client.DeleteChunk(ctx, req)
 }

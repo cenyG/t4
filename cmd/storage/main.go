@@ -1,6 +1,7 @@
 package main
 
 import (
+	"T4_test_case/pkg/interceptors"
 	"fmt"
 	"log"
 	"log/slog"
@@ -15,6 +16,7 @@ import (
 )
 
 func main() {
+	config.Init()
 	// validate config
 	serviceId, port, healthCheckPort := config.Cfg.Storage.Name, config.Cfg.Storage.Port, config.Cfg.Common.HealthCheckPort
 
@@ -45,7 +47,10 @@ func main() {
 		log.Fatalf("failed to start: %v", err)
 	}
 
-	s := grpc.NewServer()
+	s := grpc.NewServer(
+		grpc.UnaryInterceptor(interceptors.UnaryPanicRecoveryInterceptor()),
+		grpc.StreamInterceptor(interceptors.StreamPanicRecoveryInterceptor()),
+	)
 	desc.RegisterChunkStorageServer(s, service.NewChunkStorageService())
 
 	slog.Info(fmt.Sprintf("storage server %s listening on port: %s", serviceId, config.Cfg.Storage.Port))
